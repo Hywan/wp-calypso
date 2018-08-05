@@ -14,6 +14,7 @@
 /* eslint-enable */
 
 const queuedMessages = [];
+const CACHE_VERSION = 'v1';
 
 /**
  *  We want to make sure that if the service worker gets updated that we
@@ -22,7 +23,26 @@ const queuedMessages = [];
  **/
 
 self.addEventListener( 'install', function( event ) {
-	event.waitUntil( self.skipWaiting() );
+	self.skipWaiting();
+
+	event.waitUntil(
+		caches.open( CACHE_VERSION ).then( function( cache ) {
+			// these are just guesses right now
+			return cache
+				.addAll( [
+					'/',
+					// these all need version numbers or hashes etc...
+					// '/calypso/manifest.js',
+					// '/calypso/vendors~build.js',
+					// '/calypso/build.js',
+					// '/calypso/reader.js',
+					//'/calypso/style-debug.css',
+				] )
+				.catch( function( err ) {
+					console.error( 'error precaching: ', err );
+				} );
+		} )
+	);
 } );
 
 self.addEventListener( 'activate', function( event ) {
@@ -103,6 +123,20 @@ self.addEventListener( 'message', function( event ) {
 
 /* eslint-disable */
 self.addEventListener( 'fetch', function( event ) {
-	// this listener is required for "Add to Home Screen" support
+	if ( event.request.mode === 'navigate' ) {
+		event.respondWith(
+			caches.open( CACHE_VERSION ).then( function( cache ) {
+				return cache.match( event.request ).then( function( response ) {
+					return (
+						response ||
+						fetch( event.request ).then( function( response ) {
+							cache.put( event.request, response.clone() );
+							return response;
+						} )
+					);
+				} );
+			} )
+		);
+	}
 } );
 /* eslint-enable */
