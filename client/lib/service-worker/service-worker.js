@@ -106,21 +106,21 @@ self.addEventListener( 'message', function( event ) {
 
 /* eslint-disable */
 self.addEventListener( 'fetch', function( event ) {
-	if ( event.request.mode === 'navigate' ) {
-		event.respondWith(
-			caches.open( CACHE_VERSION ).then( function( cache ) {
-				return cache.match( event.request ).then( function( response ) {
-					return (
-						response ||
-						fetch( event.request ).then( function( response ) {
+	event.respondWith(
+		caches.open( CACHE_VERSION ).then( function( cache ) {
+			return cache.match( event.request ).then( function( response ) {
+				return (
+					response ||
+					fetch( event.request ).then( function( response ) {
+						if ( event.request.mode === 'navigate' ) {
 							cache.put( event.request, response.clone() );
-							return response;
-						} )
-					);
-				} );
-			} )
-		);
-	}
+						}
+						return response;
+					} )
+				);
+			} );
+		} )
+	);
 } );
 /* eslint-enable */
 
