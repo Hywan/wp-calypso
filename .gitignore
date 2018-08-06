@@ -43,6 +43,7 @@ test-results*.xml
 /server/devdocs/components-usage-stats.json
 /server/devdocs/proptypes-index.json
 /server/bundler/assets.json
+/server/bundler/asset-files.json
 
 *.rdb
 *.db

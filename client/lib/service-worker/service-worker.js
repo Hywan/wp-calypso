@@ -25,24 +25,7 @@ const CACHE_VERSION = 'v1';
 self.addEventListener( 'install', function( event ) {
 	self.skipWaiting();
 
-	event.waitUntil(
-		caches.open( CACHE_VERSION ).then( function( cache ) {
-			// these are just guesses right now
-			return cache
-				.addAll( [
-					'/',
-					// these all need version numbers or hashes etc...
-					// '/calypso/manifest.js',
-					// '/calypso/vendors~build.js',
-					// '/calypso/build.js',
-					// '/calypso/reader.js',
-					//'/calypso/style-debug.css',
-				] )
-				.catch( function( err ) {
-					console.error( 'error precaching: ', err );
-				} );
-		} )
-	);
+	event.waitUntil( precache() );
 } );
 
 self.addEventListener( 'activate', function( event ) {
@@ -140,3 +123,16 @@ self.addEventListener( 'fetch', function( event ) {
 	}
 } );
 /* eslint-enable */
+
+function precache() {
+	// Load configuration from server
+	return fetch( '/assets.json' ).then( function( response ) {
+		return response.json().then( function( assets ) {
+			// prefetch assets
+			return caches.open( CACHE_VERSION ).then( function( cache ) {
+				// resolve all assets
+				return cache.addAll( assets );
+			} );
+		} );
+	} );
+}

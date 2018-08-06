@@ -25,5 +25,11 @@ export default () => {
 		)
 	);
 
+	// this is used from the service worker to cache all our assets on load
+	app.use(
+		'/assets.json',
+		express.static( path.resolve( __dirname, '..', 'bundler', 'asset-files.json' ) )
+	);
+
 	return app;
 };
