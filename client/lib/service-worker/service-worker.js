@@ -29,6 +29,11 @@ self.addEventListener( 'install', function( event ) {
 } );
 
 self.addEventListener( 'activate', function( event ) {
+	// https://developers.google.com/web/updates/2017/02/navigation-preload
+	if ( self.registration.navigationPreload ) {
+		event.waitUntil( self.registration.navigationPreload.enable() );
+	}
+
 	event.waitUntil( self.clients.claim() );
 } );
 
@@ -104,35 +109,88 @@ self.addEventListener( 'message', function( event ) {
 	}
 } );
 
-/* eslint-disable */
 self.addEventListener( 'fetch', function( event ) {
-	event.respondWith(
-		caches.open( CACHE_VERSION ).then( function( cache ) {
-			return cache.match( event.request ).then( function( response ) {
-				return (
-					response ||
-					fetch( event.request ).then( function( response ) {
-						if ( event.request.mode === 'navigate' ) {
-							cache.put( event.request, response.clone() );
-						}
-						return response;
-					} )
-				);
-			} );
-		} )
-	);
+	const request = event.request;
+
+	if ( request.method !== 'GET' || ! isCacheable( request.url ) ) {
+		return;
+	}
+
+	if ( request.mode === 'navigate' ) {
+		event.respondWith( fetchNetworkFirst( request, '/' ) );
+		return;
+	}
+
+	event.respondWith( fetchCacheFirst( request ) );
 } );
+
+/* eslint-disable */
+function isCacheable( url ) {
+	var urlObject;
+
+	if ( ! url ) {
+		return false;
+	}
+
+	if ( url[ 0 ] === '/' ) {
+		url = location.origin + url;
+	}
+
+	try {
+		urlObject = new URL( url );
+	} catch ( err ) {
+		// malformed url
+		return false;
+	}
+
+	return (
+		urlObject.origin === location.origin &&
+		! urlObject.pathname.match( /service-worker\.js$|__webpack_hmr$|^\/socket\.io\/|\/version/ )
+	);
+}
 /* eslint-enable */
+
+function fetchCacheFirst( request ) {
+	return caches.match( request ).then( cachedResponse => cachedResponse || fetch( request ) );
+}
+
+function fetchNetworkFirst( request, fallback /* = null */ ) {
+	return caches.open( CACHE_VERSION ).then( cache => {
+		return fetch( request )
+			.then( networkResponse => {
+				if ( isCacheable( request.url ) ) {
+					cache.put( request, networkResponse.clone() );
+				}
+				return networkResponse;
+			} )
+			.catch( () => {
+				return cache.match( request ).then( cachedResponse => {
+					if ( cachedResponse ) {
+						return cachedResponse;
+					}
+					if ( fallback ) {
+						return caches.match( fallback );
+					}
+					return Promise.reject();
+				} );
+			} );
+	} );
+}
 
 function precache() {
 	// Load configuration from server
-	return fetch( '/assets.json' ).then( function( response ) {
-		return response.json().then( function( assets ) {
-			// prefetch assets
-			return caches.open( CACHE_VERSION ).then( function( cache ) {
-				// resolve all assets
-				return cache.addAll( assets );
+	return Promise.all( [
+		fetch( '/assets.json' ).then( function( response ) {
+			return response.json().then( function( assets ) {
+				// prefetch assets
+				return caches.open( CACHE_VERSION ).then( function( cache ) {
+					// resolve all assets
+					return cache.addAll( assets.filter( isCacheable ) );
+				} );
 			} );
-		} );
-	} );
+		} ),
+		caches.open( CACHE_VERSION ).then( function( cache ) {
+			return cache.add( '/' );
+		} ),
+	] );
 }
