@@ -15,6 +15,7 @@
 
 const queuedMessages = [];
 const CACHE_VERSION = 'v1';
+const OFFLINE_CALYPSO_PAGE = '/log-in';
 
 /**
  *  We want to make sure that if the service worker gets updated that we
@@ -117,7 +118,8 @@ self.addEventListener( 'fetch', function( event ) {
 	}
 
 	if ( request.mode === 'navigate' ) {
-		event.respondWith( fetchNetworkFirst( request, '/' ) );
+		// we know /log-in is available logged out from all calypso environments, let's cache this page
+		event.respondWith( fetchNetworkFirst( request, OFFLINE_CALYPSO_PAGE ) );
 		return;
 	}
 
@@ -190,7 +192,7 @@ function precache() {
 			} );
 		} ),
 		caches.open( CACHE_VERSION ).then( function( cache ) {
-			return cache.add( '/' );
+			return cache.add( OFFLINE_CALYPSO_PAGE );
 		} ),
 	] );
 }
