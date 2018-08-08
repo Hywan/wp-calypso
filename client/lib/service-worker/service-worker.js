@@ -147,6 +147,7 @@ function isCacheable( url ) {
 
 	return (
 		urlObject.origin === location.origin &&
+		urlObject.pathname.match( /\.(js|svg|css|woff2)$/ ) &&
 		! urlObject.pathname.match( /service-worker\.js$|__webpack_hmr$|^\/socket\.io\/|\/version/ )
 	);
 }
@@ -192,7 +193,7 @@ function precache() {
 			} );
 		} ),
 		caches.open( CACHE_VERSION ).then( function( cache ) {
-			return cache.add( OFFLINE_CALYPSO_PAGE );
+			return cache.add( new Request( OFFLINE_CALYPSO_PAGE, { credentials: 'omit' } ) );
 		} ),
 	] );
 }
