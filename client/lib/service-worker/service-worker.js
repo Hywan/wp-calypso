@@ -30,12 +30,17 @@ self.addEventListener( 'install', function( event ) {
 } );
 
 self.addEventListener( 'activate', function( event ) {
-	// https://developers.google.com/web/updates/2017/02/navigation-preload
-	if ( self.registration.navigationPreload ) {
-		event.waitUntil( self.registration.navigationPreload.enable() );
-	}
-
-	event.waitUntil( self.clients.claim() );
+	event.waitUntil(
+		Promise.all( [
+			// https://developers.google.com/web/updates/2017/02/navigation-preload
+			self.registration.navigationPreload && self.registration.navigationPreload.enable(),
+			// Calling clients.claim() here sets the Service Worker as the controller of the client pages.
+			// This allows the pages to start using the Service Worker immediately without reloading.
+			// https://developer.mozilla.org/en-US/docs/Web/API/Clients/claim
+			self.clients.claim(),
+			clearOldCaches(),
+		] )
+	);
 } );
 
 self.addEventListener( 'push', function( event ) {
@@ -196,4 +201,16 @@ function precache() {
 			return cache.add( new Request( OFFLINE_CALYPSO_PAGE, { credentials: 'omit' } ) );
 		} ),
 	] );
+}
+
+function clearOldCaches() {
+	return self.caches.keys().then( function( cacheNames ) {
+		return Promise.all(
+			cacheNames.map( function( cacheName ) {
+				if ( CACHE_VERSION !== cacheName ) {
+					return self.caches.delete( cacheName );
+				}
+			} )
+		);
+	} );
 }
