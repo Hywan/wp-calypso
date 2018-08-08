@@ -153,8 +153,10 @@ function isCacheable( url ) {
 
 	return (
 		urlObject.origin === location.origin &&
-		urlObject.pathname.match( /\.(js|svg|css|woff2)$/ ) &&
-		! urlObject.pathname.match( /service-worker\.js$|__webpack_hmr$|^\/socket\.io\/|\/version/ )
+		urlObject.pathname.match( /\.(js|css|svg|gif|png|woff2?|ttf|eot|wav)$/ ) &&
+		! urlObject.pathname.match(
+			/service-worker\.js$|__webpack_hmr$|^\/socket\.io\/|\/version|\/flags\/[a-z]+\.svg$/
+		)
 	);
 }
 /* eslint-enable */
