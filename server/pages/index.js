@@ -135,6 +135,8 @@ function generateStaticUrls() {
 	return urls;
 }
 
+const staticUrls = generateStaticUrls();
+
 function getCurrentBranchName() {
 	try {
 		return execSync( 'git rev-parse --abbrev-ref HEAD' )
@@ -225,7 +227,7 @@ function getDefaultContext( request ) {
 	const context = Object.assign( {}, request.context, {
 		commitSha: process.env.hasOwnProperty( 'COMMIT_SHA' ) ? process.env.COMMIT_SHA : '(unknown)',
 		compileDebug: process.env.NODE_ENV === 'development',
-		urls: generateStaticUrls(),
+		urls: staticUrls,
 		user: false,
 		env: calypsoEnv,
 		sanitize: sanitize,
@@ -767,6 +769,10 @@ module.exports = function() {
 				} )
 			);
 		} );
+	} );
+
+	app.get( '/assets.json', function( req, res ) {
+		res.json( flatten( Object.values( staticUrls ) ) );
 	} );
 
 	// catchall to render 404 for all routes not whitelisted in client/sections

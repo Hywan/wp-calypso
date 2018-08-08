@@ -230,11 +230,6 @@ const webpackConfig = {
 			filename: 'assets.json',
 			path: path.join( __dirname, 'server', 'bundler' ),
 		} ),
-		new AssetsWriter( {
-			filename: 'asset-files.json',
-			path: path.join( __dirname, 'server', 'bundler' ),
-			assetNamesOnly: true,
-		} ),
 		shouldCheckForCycles &&
 			new CircularDependencyPlugin( {
 				exclude: /node_modules/,

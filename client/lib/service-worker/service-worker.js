@@ -159,10 +159,8 @@ function isCacheable( url ) {
 
 	return (
 		urlObject.origin === location.origin &&
-		urlObject.pathname.match( /\.(js|css|svg|gif|png|woff2?|ttf|eot|wav)$/ ) &&
-		! urlObject.pathname.match(
-			/service-worker\.js$|__webpack_hmr$|^\/socket\.io\/|\/version|\/flags\/[a-z]+\.svg$/
-		)
+		urlObject.pathname.match( /\.(json|js|css|svg|gif|png|woff2?|ttf|eot|wav)$/ ) &&
+		! urlObject.pathname.match( /__webpack_hmr$|^\/socket\.io\/|\/version|\/flags\/[a-z]+\.svg$/ )
 	);
 }
 /* eslint-enable */
@@ -207,7 +205,7 @@ function precache() {
 			} );
 		} ),
 		caches.open( CACHE_VERSION ).then( function( cache ) {
-			return cache.add( new Request( OFFLINE_CALYPSO_PAGE, { credentials: 'omit' } ) );
+			return cache.add( OFFLINE_CALYPSO_PAGE );
 		} ),
 	] );
 }
