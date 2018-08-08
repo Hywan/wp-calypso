@@ -125,10 +125,7 @@ self.addEventListener( 'fetch', function( event ) {
 
 	// HTML Pages, fetch from the server and fallback to the Login page
 	// we know /log-in is available logged out from all calypso environments
-	if (
-		request.mode === 'navigate' &&
-		request.headers.get( 'Accept' ).indexOf( 'text/html' ) !== -1
-	) {
+	if ( request.mode === 'navigate' ) {
 		event.respondWith( fetchNetworkFirst( request, OFFLINE_CALYPSO_PAGE ) );
 		return;
 	}
@@ -166,7 +163,25 @@ function isCacheable( url ) {
 /* eslint-enable */
 
 function fetchCacheFirst( request ) {
-	return caches.match( request ).then( cachedResponse => cachedResponse || fetch( request ) );
+	return caches.open( CACHE_VERSION ).then( cache => {
+		return caches.match( request ).then( cachedResponse => {
+			if ( cachedResponse ) {
+				return cachedResponse;
+			}
+
+			return fetch( request )
+				.then( networkResponse => {
+					if ( isCacheable( request.url ) ) {
+						cache.put( request, networkResponse.clone() );
+					}
+					return networkResponse;
+				} )
+				.catch( () => {
+					// if cache and network failed, try cache one more time without query parameters
+					return caches.match( request, { ignoreSearch: true } );
+				} );
+		} );
+	} );
 }
 
 function fetchNetworkFirst( request, fallback /* = null */ ) {
