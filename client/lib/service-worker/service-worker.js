@@ -119,17 +119,23 @@ self.addEventListener( 'message', function( event ) {
 self.addEventListener( 'fetch', function( event ) {
 	const request = event.request;
 
-	if ( request.method !== 'GET' || ! isCacheable( request.url ) ) {
+	if ( request.method !== 'GET' ) {
 		return;
 	}
 
-	if ( request.mode === 'navigate' ) {
-		// we know /log-in is available logged out from all calypso environments, let's cache this page
+	// HTML Pages, fetch from the server and fallback to the Login page
+	// we know /log-in is available logged out from all calypso environments
+	if (
+		request.mode === 'navigate' &&
+		request.headers.get( 'Accept' ).indexOf( 'text/html' ) !== -1
+	) {
 		event.respondWith( fetchNetworkFirst( request, OFFLINE_CALYPSO_PAGE ) );
 		return;
 	}
 
-	event.respondWith( fetchCacheFirst( request ) );
+	if ( isCacheable( request.url ) ) {
+		event.respondWith( fetchCacheFirst( request ) );
+	}
 } );
 
 /* eslint-disable */
