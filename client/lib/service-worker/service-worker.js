@@ -24,6 +24,7 @@ const OFFLINE_CALYPSO_PAGE = '/log-in';
  **/
 
 self.addEventListener( 'install', function( event ) {
+	// The promise that skipWaiting() returns can be safely ignored.
 	self.skipWaiting();
 
 	event.waitUntil( precache() );
