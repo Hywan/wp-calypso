@@ -15,7 +15,7 @@
 
 const queuedMessages = [];
 const CACHE_VERSION = 'v1';
-const OFFLINE_CALYPSO_PAGE = '/log-in';
+const OFFLINE_CALYPSO_PAGE = '/offline';
 
 /**
  *  We want to make sure that if the service worker gets updated that we
