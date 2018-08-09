@@ -28,9 +28,7 @@ self.addEventListener( 'install', function( event ) {
 	// The promise that skipWaiting() returns can be safely ignored.
 	self.skipWaiting();
 
-	event.waitUntil(
-		Promise.all( [ fetchAssets().then( cacheUrls ), cacheUrls( [ OFFLINE_CALYPSO_PAGE ] ) ] )
-	);
+	event.waitUntil( cacheUrls( [ OFFLINE_CALYPSO_PAGE ], true ) );
 } );
 
 self.addEventListener( 'activate', function( event ) {
@@ -132,21 +130,28 @@ self.addEventListener( 'fetch', function( event ) {
 		// Fetching assets.json on each page load should be relatively lightweight as
 		// the server will return a 304 response if it hasn't changed
 		const previousHash = currentAssetsHash;
-		event.respondWith(
-			fetchAssets()
-				.then( function( assets ) {
-					if ( previousHash !== currentAssetsHash ) {
-						return Promise.all( [
-							cacheUrls( assets ),
-							// if assets have changed the offline page might have as well, refresh it
-							cacheUrls( [ OFFLINE_CALYPSO_PAGE ] ),
-						] );
-					}
-				} )
-				.then( function() {
-					return fetchNetworkFirst( request, OFFLINE_CALYPSO_PAGE );
-				} )
-		);
+		if ( navigator.onLine ) {
+			event.respondWith(
+				fetchAssets()
+					.then( function( assets ) {
+						if ( previousHash !== currentAssetsHash ) {
+							return Promise.all( [
+								cacheUrls( assets ),
+								// if assets have changed the offline page might have as well, refresh it
+								cacheUrls( [ OFFLINE_CALYPSO_PAGE ], true ),
+							] );
+						}
+					} )
+					.then( function() {
+						return fetchNetworkFirst( request, OFFLINE_CALYPSO_PAGE );
+					} )
+					.catch( function() {
+						return caches.match( OFFLINE_CALYPSO_PAGE );
+					} )
+			);
+		} else {
+			event.respondWith( caches.match( OFFLINE_CALYPSO_PAGE ) );
+		}
 		return;
 	}
 
@@ -238,10 +243,11 @@ function fetchAssets() {
 	} );
 }
 
-function cacheUrls( urls ) {
+function cacheUrls( urls, force ) {
+	force = force || false;
 	return caches.open( CACHE_VERSION ).then( function( cache ) {
 		// resolve all assets
-		return cache.addAll( urls.filter( isCacheable ) );
+		return cache.addAll( force ? urls : urls.filter( isCacheable ) );
 	} );
 }
 
