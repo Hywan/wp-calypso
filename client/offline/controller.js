@@ -8,7 +8,7 @@ import React from 'react';
 /**
  * Internal dependencies
  */
-import Offline from './main';
+import Offline from 'components/offline';
 
 export function offline( context, next ) {
 	context.primary = <Offline />;
