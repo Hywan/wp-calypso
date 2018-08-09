@@ -83,8 +83,13 @@ const ASSETS_PATH = path.join( __dirname, '../', 'bundler', 'assets.json' );
 const getAssets = ( () => {
 	let assets;
 	return () => {
-		if ( ! assets ) {
-			assets = JSON.parse( fs.readFileSync( ASSETS_PATH, 'utf8' ) );
+		// refresh assets in development as those can change with webpack hot loader
+		if ( ! assets || process.env.NODE_ENV === 'development' ) {
+			const assetsContent = fs.readFileSync( ASSETS_PATH, 'utf8' );
+			assets = JSON.parse( assetsContent );
+			const shasum = crypto.createHash( 'sha1' );
+			shasum.update( assetsContent );
+			assets.hash = shasum.digest( 'hex' );
 		}
 		return assets;
 	};
@@ -769,13 +774,23 @@ module.exports = function() {
 		} );
 	} );
 
-	let staticUrls;
-	app.get( '/assets.json', function( req, res ) {
-		if ( ! staticUrls ) {
-			staticUrls = flatten( Object.values( generateStaticUrls() ) );
-		}
-		res.json( staticUrls );
-	} );
+	app.get(
+		'/assets.json',
+		( () => {
+			// cache last response
+			let lastAssetsResponse;
+			return function( req, res ) {
+				const assetsHash = getAssets().hash;
+				if ( ! lastAssetsResponse || lastAssetsResponse.hash !== assetsHash ) {
+					lastAssetsResponse = {
+						assets: flatten( Object.values( generateStaticUrls() ) ),
+						hash: assetsHash,
+					};
+				}
+				res.json( lastAssetsResponse );
+			};
+		} )()
+	);
 
 	// catchall to render 404 for all routes not whitelisted in client/sections
 	app.use( render404 );

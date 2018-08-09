@@ -11,6 +11,7 @@
 
 /* eslint-disable */
 'use strict';
+var currentAssetsHash;
 /* eslint-enable */
 
 const queuedMessages = [];
@@ -27,7 +28,9 @@ self.addEventListener( 'install', function( event ) {
 	// The promise that skipWaiting() returns can be safely ignored.
 	self.skipWaiting();
 
-	event.waitUntil( precache() );
+	event.waitUntil(
+		Promise.all( [ fetchAssets().then( cacheUrls ), cacheUrls( [ OFFLINE_CALYPSO_PAGE ] ) ] )
+	);
 } );
 
 self.addEventListener( 'activate', function( event ) {
@@ -123,10 +126,27 @@ self.addEventListener( 'fetch', function( event ) {
 		return;
 	}
 
-	// HTML Pages, fetch from the server and fallback to the Login page
-	// we know /log-in is available logged out from all calypso environments
+	// HTML Pages, fetch from the server and fallback to the Offline page
 	if ( request.mode === 'navigate' ) {
-		event.respondWith( fetchNetworkFirst( request, OFFLINE_CALYPSO_PAGE ) );
+		// But first check that assets have not changed
+		// Fetching assets.json on each page load should be relatively lightweight as
+		// the server will return a 304 response if it hasn't changed
+		const previousHash = currentAssetsHash;
+		event.respondWith(
+			fetchAssets()
+				.then( function( assets ) {
+					if ( previousHash !== currentAssetsHash ) {
+						return Promise.all( [
+							cacheUrls( assets ),
+							// if assets have changed the offline page might have as well, refresh it
+							cacheUrls( [ OFFLINE_CALYPSO_PAGE ] ),
+						] );
+					}
+				} )
+				.then( function() {
+					return fetchNetworkFirst( request, OFFLINE_CALYPSO_PAGE );
+				} )
+		);
 		return;
 	}
 
@@ -157,26 +177,28 @@ function isCacheable( url ) {
 	return (
 		urlObject.origin === location.origin &&
 		urlObject.pathname.match( /\.(json|js|css|svg|gif|png|woff2?|ttf|eot|wav)$/ ) &&
-		! urlObject.pathname.match( /__webpack_hmr$|^\/socket\.io\/|\/version|\/flags\/[a-z]+\.svg$/ )
+		! urlObject.pathname.match(
+			/assets\.json$|__webpack_hmr$|^\/socket\.io\/|^\/version$|\/flags\/[a-z]+\.svg$/
+		)
 	);
 }
 /* eslint-enable */
 
 function fetchCacheFirst( request ) {
-	return caches.open( CACHE_VERSION ).then( cache => {
-		return caches.match( request ).then( cachedResponse => {
+	return caches.open( CACHE_VERSION ).then( function( cache ) {
+		return caches.match( request ).then( function( cachedResponse ) {
 			if ( cachedResponse ) {
 				return cachedResponse;
 			}
 
 			return fetch( request )
-				.then( networkResponse => {
+				.then( function( networkResponse ) {
 					if ( isCacheable( request.url ) ) {
 						cache.put( request, networkResponse.clone() );
 					}
 					return networkResponse;
 				} )
-				.catch( () => {
+				.catch( function() {
 					// if cache and network failed, try cache one more time without query parameters
 					return caches.match( request, { ignoreSearch: true } );
 				} );
@@ -185,16 +207,16 @@ function fetchCacheFirst( request ) {
 }
 
 function fetchNetworkFirst( request, fallback /* = null */ ) {
-	return caches.open( CACHE_VERSION ).then( cache => {
+	return caches.open( CACHE_VERSION ).then( function( cache ) {
 		return fetch( request )
-			.then( networkResponse => {
+			.then( function( networkResponse ) {
 				if ( isCacheable( request.url ) ) {
 					cache.put( request, networkResponse.clone() );
 				}
 				return networkResponse;
 			} )
-			.catch( () => {
-				return cache.match( request ).then( cachedResponse => {
+			.catch( function() {
+				return cache.match( request ).then( function( cachedResponse ) {
 					if ( cachedResponse ) {
 						return cachedResponse;
 					}
@@ -207,22 +229,20 @@ function fetchNetworkFirst( request, fallback /* = null */ ) {
 	} );
 }
 
-function precache() {
-	// Load configuration from server
-	return Promise.all( [
-		fetch( '/assets.json' ).then( function( response ) {
-			return response.json().then( function( assets ) {
-				// prefetch assets
-				return caches.open( CACHE_VERSION ).then( function( cache ) {
-					// resolve all assets
-					return cache.addAll( assets.filter( isCacheable ) );
-				} );
-			} );
-		} ),
-		caches.open( CACHE_VERSION ).then( function( cache ) {
-			return cache.add( OFFLINE_CALYPSO_PAGE );
-		} ),
-	] );
+function fetchAssets() {
+	return fetch( '/assets.json' ).then( function( response ) {
+		return response.json().then( function( json ) {
+			currentAssetsHash = json.hash;
+			return json.assets;
+		} );
+	} );
+}
+
+function cacheUrls( urls ) {
+	return caches.open( CACHE_VERSION ).then( function( cache ) {
+		// resolve all assets
+		return cache.addAll( urls.filter( isCacheable ) );
+	} );
 }
 
 function clearOldCaches() {

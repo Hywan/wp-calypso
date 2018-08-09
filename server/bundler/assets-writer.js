@@ -15,17 +15,11 @@ function AssetsWriter( options ) {
 		},
 		options
 	);
-	this.createOutputStream();
+	this.outputPath = path.join( this.options.path, this.options.filename );
 }
 
 Object.assign( AssetsWriter.prototype, {
-	createOutputStream: function() {
-		this.outputPath = path.join( this.options.path, this.options.filename );
-		this.outputStream = fs.createWriteStream( this.outputPath );
-	},
 	apply: function( compiler ) {
-		const self = this;
-
 		compiler.hooks.afterEmit.tap( 'AssetsWriter', compilation => {
 			const stats = compilation.getStats().toJson( {
 				hash: true,
@@ -95,7 +89,8 @@ Object.assign( AssetsWriter.prototype, {
 				);
 			}
 
-			self.outputStream.write( JSON.stringify( statsToOutput, null, '\t' ) );
+			// Write the whole file synchronously as we want to be able to read and parse the file at any time
+			fs.writeFileSync( this.outputPath, JSON.stringify( statsToOutput, null, '\t' ) );
 		} );
 	},
 } );
