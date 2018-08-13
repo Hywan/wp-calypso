@@ -126,28 +126,35 @@ self.addEventListener( 'fetch', function( event ) {
 
 	// HTML Pages, fetch from the server and fallback to the Offline page
 	if ( request.mode === 'navigate' ) {
-		// But first check that assets have not changed
-		// Fetching assets.json on each page load should be relatively lightweight as
-		// the server will return a 304 response if it hasn't changed
 		const previousHash = currentAssetsHash;
 		if ( navigator.onLine ) {
 			event.respondWith(
-				fetchAssets()
-					.then( function( assets ) {
-						if ( previousHash !== currentAssetsHash ) {
-							return Promise.all( [
-								cacheUrls( assets ),
-								// if assets have changed the offline page might have as well, refresh it
-								cacheUrls( [ OFFLINE_CALYPSO_PAGE ], true ),
-							] );
-						}
-					} )
-					.then( function() {
-						return fetchNetworkFirst( request, OFFLINE_CALYPSO_PAGE );
-					} )
-					.catch( function() {
-						return caches.match( OFFLINE_CALYPSO_PAGE );
-					} )
+				fetchNetworkFirst( request, OFFLINE_CALYPSO_PAGE ).then( function( response ) {
+					// Detect if the loaded page is calypso or not
+					// TODO: update nginx to reverse proxy this header
+					if ( response.headers.get( 'x-powered-by' ) === 'Express' ) {
+						// Let's check that assets have not changed before serving the page
+						// Fetching assets.json on each page load should be relatively lightweight as
+						// the server will return a 304 response if it hasn't changed
+						return fetchAssets()
+							.then( function( assets ) {
+								if ( previousHash !== currentAssetsHash ) {
+									return Promise.all( [
+										cacheUrls( assets ),
+										// if assets have changed the offline page might have as well, refresh it
+										cacheUrls( [ OFFLINE_CALYPSO_PAGE ], true ),
+									] );
+								}
+							} )
+							.then( function() {
+								return response;
+							} )
+							.catch( function() {
+								return response;
+							} );
+					}
+					return response;
+				} )
 			);
 		} else {
 			event.respondWith( caches.match( OFFLINE_CALYPSO_PAGE ) );
