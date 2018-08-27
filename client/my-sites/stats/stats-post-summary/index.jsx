@@ -3,22 +3,26 @@
 /**
  * External dependencies
  */
-
 import PropTypes from 'prop-types';
 import React, { Component } from 'react';
 import { localize } from 'i18n-calypso';
 import { connect } from 'react-redux';
-import { findIndex, findLastIndex, flatten, flowRight, get, range } from 'lodash';
+import { flowRight } from 'lodash';
 
 /**
  * Internal dependencies
  */
 import SummaryChart from '../stats-summary';
 import SectionNav from 'components/section-nav';
-import SegmentedControl from 'components/segmented-control';
-import ControlItem from 'components/segmented-control/item';
+import SimplifiedSegmentedControl from 'components/segmented-control/simplified';
 import QueryPostStats from 'components/data/query-post-stats';
 import { getPostStats, isRequestingPostStats } from 'state/stats/posts/selectors';
+import {
+	generateDayChartData,
+	generateWeekChartData,
+	generateMonthChartData,
+	generateYearChartData,
+} from './utility';
 
 class StatsPostSummary extends Component {
 	static propTypes = {
@@ -27,21 +31,21 @@ class StatsPostSummary extends Component {
 		translate: PropTypes.func,
 	};
 
-	state = {
-		period: 'day',
-	};
+	constructor( props ) {
+		super( props );
 
-	selectPeriod( period ) {
-		return () =>
-			this.setState( {
-				selectedRecord: undefined,
-				period,
-			} );
+		this.periods = [
+			{ value: 'day', label: this.props.translate( 'Days' ) },
+			{ value: 'week', label: this.props.translate( 'Weeks' ) },
+			{ value: 'month', label: this.props.translate( 'Months' ) },
+			{ value: 'year', label: this.props.translate( 'Years' ) },
+		];
+
+		this.state = { period: 'day' };
 	}
 
-	selectRecord = record => {
-		this.setState( { selectedRecord: record } );
-	};
+	selectPeriod = ( { value: period } ) => this.setState( { selectedRecord: undefined, period } );
+	selectRecord = selectedRecord => this.setState( { selectedRecord } );
 
 	getChartData() {
 		const { moment, stats } = this.props;
@@ -51,66 +55,13 @@ class StatsPostSummary extends Component {
 
 		switch ( this.state.period ) {
 			case 'day':
-				if ( ! stats.data ) {
-					return [];
-				}
-
-				return stats.data
-					.slice( Math.max( stats.data.length - 10, 1 ) )
-					.map( ( [ date, value ] ) => {
-						const momentDate = moment( date );
-						return {
-							period: momentDate.format( 'MMM D' ),
-							periodLabel: momentDate.format( 'LL' ),
-							value,
-						};
-					} );
-			case 'year':
-				if ( ! stats.years ) {
-					return [];
-				}
-
-				return Object.keys( stats.years ).map( year => {
-					return {
-						period: year,
-						periodLabel: year,
-						value: stats.years[ year ].total,
-					};
-				} );
-			case 'month':
-				if ( ! stats.years ) {
-					return [];
-				}
-
-				const months = flatten(
-					Object.keys( stats.years ).map( year => {
-						return range( 1, 13 ).map( month => {
-							const firstDayOfMonth = moment( `1/${ month }/${ year }`, 'DD/MM/YYYY' );
-							return {
-								period: firstDayOfMonth.format( 'MMM YYYY' ),
-								periodLabel: firstDayOfMonth.format( 'MMMM YYYY' ),
-								value: get( stats.years, [ year, 'months', month ], 0 ),
-							};
-						} );
-					} )
-				);
-				const firstNotEmpty = findIndex( months, item => item.value !== 0 );
-				const lastNotEmpty = findLastIndex( months, item => item.value !== 0 );
-
-				return months.slice( firstNotEmpty, lastNotEmpty + 1 );
+				return generateDayChartData( stats.data, moment );
 			case 'week':
-				if ( ! stats.weeks ) {
-					return [];
-				}
-
-				return stats.weeks.map( week => {
-					const firstDay = moment( week.days[ 0 ].day );
-					return {
-						period: firstDay.format( 'MMM D' ),
-						periodLabel: firstDay.format( 'L' ) + ' - ' + firstDay.add( 6, 'days' ).format( 'L' ),
-						value: week.total,
-					};
-				} );
+				return generateWeekChartData( stats.weeks, moment );
+			case 'month':
+				return generateMonthChartData( stats.years, moment );
+			case 'year':
+				return generateYearChartData( stats.years );
 			default:
 				return [];
 		}
@@ -118,33 +69,22 @@ class StatsPostSummary extends Component {
 
 	render() {
 		const { isRequesting, postId, siteId, translate } = this.props;
-		const periods = [
-			{ id: 'day', label: translate( 'Days' ) },
-			{ id: 'week', label: translate( 'Weeks' ) },
-			{ id: 'month', label: translate( 'Months' ) },
-			{ id: 'year', label: translate( 'Years' ) },
-		];
 		const chartData = this.getChartData();
-		let selectedRecord = this.state.selectedRecord;
-		if ( ! this.state.selectedRecord && chartData.length ) {
-			selectedRecord = chartData[ chartData.length - 1 ];
-		}
+		const selectedRecord =
+			! this.state.selectedRecord && chartData.length
+				? chartData[ chartData.length - 1 ]
+				: this.state.selectedRecord;
 
 		return (
 			<div className="stats-post-summary">
 				<QueryPostStats siteId={ siteId } postId={ postId } />
 				<SectionNav>
-					<SegmentedControl compact>
-						{ periods.map( ( { id, label } ) => (
-							<ControlItem
-								key={ id }
-								onClick={ this.selectPeriod( id ) }
-								selected={ this.state.period === id }
-							>
-								{ label }
-							</ControlItem>
-						) ) }
-					</SegmentedControl>
+					<SimplifiedSegmentedControl
+						compact
+						initialSelected={ this.state.period }
+						onSelect={ this.selectPeriod }
+						options={ this.periods }
+					/>
 				</SectionNav>
 
 				<SummaryChart
