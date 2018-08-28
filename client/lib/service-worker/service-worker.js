@@ -150,7 +150,7 @@ self.addEventListener( 'fetch', function( event ) {
 function checkUpTodate() {
 	function checkLater() {
 		// Avoid updating assets too often if bandwidth is less than 1Mb/s
-		const downlink = self.navigator.connection.downlink || 0;
+		const downlink = self.navigator.connection.downlink || 1;
 		const delay = downlink >= 1 ? ASSETS_POLLING_INTERVAL : 60 * 60 * 1000;
 		// Add some randomness to avoid DDoSing the server
 		setTimeout( checkUpTodate, delay + 10 * Math.random() - 5 );
