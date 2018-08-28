@@ -16,7 +16,8 @@
 const queuedMessages = [];
 const CACHE_VERSION = 'v1';
 const OFFLINE_CALYPSO_PAGE = '/offline';
-const ASSETS_POLLING_INTERVAL = 1 * 60 * 1000; // 1 min
+const ASSETS_POLLING_INTERVAL = 1 * 60 * 1000; // 1 minute
+const INVALID_CACHE_MAX_DURATION = 60 * 60 * 1000; // 1 hour
 
 /**
  *  We want to make sure that if the service worker gets updated that we
@@ -149,9 +150,9 @@ self.addEventListener( 'fetch', function( event ) {
 // periodically check that assets are up to date
 function checkUpTodate() {
 	function checkLater() {
-		// Avoid updating assets too often if bandwidth is less than 1Mb/s
+		// Avoid updating assets too often if bandwidth is less than 10Mb/s
 		const downlink = self.navigator.connection.downlink || 1;
-		const delay = downlink >= 1 ? ASSETS_POLLING_INTERVAL : 60 * 60 * 1000;
+		const delay = downlink >= 10 ? ASSETS_POLLING_INTERVAL : INVALID_CACHE_MAX_DURATION;
 		// Add some randomness to avoid DDoSing the server
 		setTimeout( checkUpTodate, delay + 10 * Math.random() - 5 );
 	}
