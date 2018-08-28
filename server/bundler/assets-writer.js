@@ -11,15 +11,20 @@ function AssetsWriter( options ) {
 		{
 			path: './build',
 			filename: 'assets.json',
-			assetNamesOnly: false,
 		},
 		options
 	);
-	this.outputPath = path.join( this.options.path, this.options.filename );
+	this.createOutputStream();
 }
 
 Object.assign( AssetsWriter.prototype, {
+	createOutputStream: function() {
+		this.outputPath = path.join( this.options.path, this.options.filename );
+		this.outputStream = fs.createWriteStream( this.outputPath );
+	},
 	apply: function( compiler ) {
+		const self = this;
+
 		compiler.hooks.afterEmit.tap( 'AssetsWriter', compilation => {
 			const stats = compilation.getStats().toJson( {
 				hash: true,
@@ -37,60 +42,50 @@ Object.assign( AssetsWriter.prototype, {
 				reasons: false,
 			} );
 
+			const statsToOutput = {};
+			statsToOutput.publicPath = stats.publicPath;
+			statsToOutput.manifests = {};
+
+			for ( const name in stats.assetsByChunkName ) {
+				// make the manifest inlineable
+				if ( String( name ).startsWith( 'manifest' ) ) {
+					// Usually there's only one asset per chunk, but when we build with sourcemaps, we'll have two.
+					// Remove the sourcemap from the list and just take the js asset
+					// This may not hold true for all chunks, but it does for the manifest.
+					const jsAsset = _.head(
+						_.reject( _.castArray( stats.assetsByChunkName[ name ] ), asset =>
+							_.endsWith( asset, '.map' )
+						)
+					);
+					statsToOutput.manifests[ name ] = compilation.assets[ jsAsset ].source();
+				}
+			}
+
 			function fixupPath( f ) {
 				return path.join( stats.publicPath, f );
 			}
 
-			let statsToOutput;
+			statsToOutput.entrypoints = _.mapValues( stats.entrypoints, entry => ( {
+				chunks: _.reject( entry.chunks, chunk => {
+					String( chunk ).startsWith( 'manifest' );
+				} ),
+				assets: _.reject( entry.assets, asset => asset.startsWith( 'manifest' ) ).map( fixupPath ),
+			} ) );
 
-			if ( this.options.assetNamesOnly ) {
-				statsToOutput = _.flatten( stats.assets.map( asset => fixupPath( asset.name ) ) );
-			} else {
-				statsToOutput = {};
+			statsToOutput.assetsByChunkName = _.mapValues( stats.assetsByChunkName, asset =>
+				_.castArray( asset ).map( fixupPath )
+			);
 
-				statsToOutput.publicPath = stats.publicPath;
-				statsToOutput.manifests = {};
-
-				for ( const name in stats.assetsByChunkName ) {
-					// make the manifest inlineable
-					if ( String( name ).startsWith( 'manifest' ) ) {
-						// Usually there's only one asset per chunk, but when we build with sourcemaps, we'll have two.
-						// Remove the sourcemap from the list and just take the js asset
-						// This may not hold true for all chunks, but it does for the manifest.
-						const jsAsset = _.head(
-							_.reject( _.castArray( stats.assetsByChunkName[ name ] ), asset =>
-								_.endsWith( asset, '.map' )
-							)
-						);
-						statsToOutput.manifests[ name ] = compilation.assets[ jsAsset ].source();
-					}
-				}
-
-				statsToOutput.entrypoints = _.mapValues( stats.entrypoints, entry => ( {
-					chunks: _.reject( entry.chunks, chunk => {
-						String( chunk ).startsWith( 'manifest' );
-					} ),
-					assets: _.reject( entry.assets, asset => asset.startsWith( 'manifest' ) ).map(
-						fixupPath
+			statsToOutput.chunks = stats.chunks.map( chunk =>
+				Object.assign( {}, chunk, {
+					files: chunk.files.map( fixupPath ),
+					siblings: _.reject( chunk.siblings, sibling =>
+						String( sibling ).startsWith( 'manifest' )
 					),
-				} ) );
+				} )
+			);
 
-				statsToOutput.assetsByChunkName = _.mapValues( stats.assetsByChunkName, asset =>
-					_.castArray( asset ).map( fixupPath )
-				);
-
-				statsToOutput.chunks = stats.chunks.map( chunk =>
-					Object.assign( {}, chunk, {
-						files: chunk.files.map( fixupPath ),
-						siblings: _.reject( chunk.siblings, sibling =>
-							String( sibling ).startsWith( 'manifest' )
-						),
-					} )
-				);
-			}
-
-			// Write the whole file synchronously as we want to be able to read and parse the file at any time
-			fs.writeFileSync( this.outputPath, JSON.stringify( statsToOutput, null, '\t' ) );
+			self.outputStream.write( JSON.stringify( statsToOutput, null, '\t' ) );
 		} );
 	},
 } );
