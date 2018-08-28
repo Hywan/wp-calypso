@@ -148,12 +148,20 @@ self.addEventListener( 'fetch', function( event ) {
 
 // periodically check that assets are up to date
 function checkUpTodate() {
+	function checkLater() {
+		// Avoid updating assets too often if bandwidth is less than 1Mb/s
+		const downlink = self.navigator.connection.downlink || 0;
+		const delay = downlink >= 1 ? ASSETS_POLLING_INTERVAL : 60 * 60 * 1000;
+		// Add some randomness to avoid DDoSing the server
+		setTimeout( checkUpTodate, delay + 10 * Math.random() - 5 );
+	}
+
 	if ( ! navigator.onLine ) {
-		return;
+		return checkLater();
 	}
 
 	if ( ! self.registration.active ) {
-		return;
+		return checkLater();
 	}
 
 	return getAssetsHashFromCache().then( previousHash => {
@@ -169,13 +177,8 @@ function checkUpTodate() {
 					} );
 				}
 			} )
-			.then( function() {
-				setTimeout( checkUpTodate, ASSETS_POLLING_INTERVAL );
-			} )
-			.catch( function() {
-				// Add some randomness to avoid DDoSing the server on error
-				setTimeout( checkUpTodate, ASSETS_POLLING_INTERVAL + 10 * Math.random() - 5 );
-			} );
+			.then( checkLater )
+			.catch( checkLater );
 	} );
 }
 
