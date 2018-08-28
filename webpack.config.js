@@ -74,27 +74,6 @@ const babelLoader = {
 	},
 };
 
-const preSassLoaders = [
-	MiniCssExtractPlugin.loader,
-	'css-loader',
-	{
-		loader: 'postcss-loader',
-		options: {
-			plugins: _.compact( [ require( 'autoprefixer' ), ! isDevelopment && require( 'cssnano' ) ] ),
-		},
-	},
-];
-
-const sassLoader = {
-	loader: 'sass-loader',
-	options: {
-		includePaths: [ path.join( __dirname, 'client' ) ],
-	},
-};
-
-// When styles-namespacing is enabled, these are the files we want to namespace
-const styleNamespaceDirectories = [ path.join( __dirname, 'client', 'components' ) ];
-
 /**
  * Converts @wordpress require into window reference
  *
@@ -130,11 +109,11 @@ const wordpressExternals = ( context, request, callback ) =>
  *
  * @param {object}  env                               environment options
  * @param {boolean} env.externalizeWordPressPackages  whether to bundle or extern the `@wordpress/` packages
- * @param {string}  env.styleNamespace             prefix Calypso component styles with CSS class or ID
+ * @param {string}  env.cssModules                    whether to use CSS modules
  *
  * @return {object}                                    webpack config
  */
-function getWebpackConfig( { externalizeWordPressPackages = false, styleNamespace = '' } = {} ) {
+function getWebpackConfig( { cssModules = false, externalizeWordPressPackages = false } = {} ) {
 	const webpackConfig = {
 		bail: ! isDevelopment,
 		context: __dirname,
@@ -200,20 +179,32 @@ function getWebpackConfig( { externalizeWordPressPackages = false, styleNamespac
 				},
 				{
 					test: /\.(sc|sa|c)ss$/,
-					use: [ ...preSassLoaders, sassLoader ],
-					// When styles-namespacing is enabled, these files are handled by separate loader below
-					...( styleNamespace ? { exclude: styleNamespaceDirectories } : {} ),
-				},
-				styleNamespace && {
-					test: /\.(sc|sa|c)ss$/,
-					include: styleNamespaceDirectories,
 					use: [
-						...preSassLoaders,
+						MiniCssExtractPlugin.loader,
 						{
-							loader: 'namespace-css-loader',
-							options: `.${ styleNamespace }`,
+							loader: 'css-loader',
+							options: {
+								modules: cssModules,
+								localIdentName: isDevelopment
+									? '[name]__[local]___[hash:base64:5]'
+									: '[hash:base64:5]',
+							},
 						},
-						sassLoader,
+						{
+							loader: 'postcss-loader',
+							options: {
+								plugins: _.compact( [
+									require( 'autoprefixer' ),
+									! isDevelopment && require( 'cssnano' ),
+								] ),
+							},
+						},
+						{
+							loader: 'sass-loader',
+							options: {
+								includePaths: [ path.join( __dirname, 'client' ) ],
+							},
+						},
 					],
 				},
 				{

@@ -8,7 +8,7 @@ import { RichText } from '@wordpress/editor';
 import Card from 'components/card';
 import Ribbon from 'components/ribbon';
 
-import './style.scss';
+import styles from './style.scss';
 
 const attributes = {
 	notes: {
@@ -17,7 +17,7 @@ const attributes = {
 };
 
 const edit = ( { attributes: { notes }, className, setAttributes } ) => (
-	<Card highlight="error" className={ `${ className } ${ className }__box calypso` }>
+	<Card highlight="error" className={ `${ className } ${ styles.box }` }>
 		<Ribbon>Hidden</Ribbon>
 		<RichText
 			tagName="p"
