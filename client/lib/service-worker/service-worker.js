@@ -242,7 +242,7 @@ function fetchNetworkFirst( request, fallback /* = null */ ) {
 }
 
 function fetchAssets() {
-	return fetch( '/assets.json' ).then( function( response ) {
+	return fetch( '/calypso/assets.json' ).then( function( response ) {
 		return response.json().then( function( json ) {
 			currentAssetsHash = json.hash;
 			return json.assets;
