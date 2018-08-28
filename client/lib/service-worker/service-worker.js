@@ -169,12 +169,15 @@ function checkUpTodate() {
 		return getAssets()
 			.then( function( response ) {
 				if ( previousHash !== response.hash ) {
-					return Promise.all( [
-						cacheUrls( response.assets ),
-						// if assets have changed the offline page might have as well, refresh it
-						cacheUrls( [ OFFLINE_CALYPSO_PAGE ], true ),
-					] ).then( function() {
-						return sendMessages( [ { action: 'needsRefresh' } ] );
+					return clearCache().then( function() {
+						return Promise.all( [
+							// TODO: Items never expire, will need cleanup at some point
+							cacheUrls( response.assets ),
+							// if assets have changed the offline page might have as well, refresh it
+							cacheUrls( [ OFFLINE_CALYPSO_PAGE ], true ),
+						] ).then( function() {
+							return sendMessages( [ { action: 'needsRefresh' } ] );
+						} );
 					} );
 				}
 			} )
@@ -297,4 +300,8 @@ function clearOldCaches() {
 			} )
 		);
 	} );
+}
+
+function clearCache() {
+	return self.caches.delete( CACHE_VERSION );
 }
