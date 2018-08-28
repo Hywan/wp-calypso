@@ -5,11 +5,13 @@
  */
 import path from 'path';
 import express from 'express';
+import { flatten } from 'lodash';
 
 /**
  * Internal dependencies
  */
 import manifest from './manifest';
+import { getAssets, generateStaticUrls } from 'bundler/assets-utils';
 
 export default () => {
 	const app = express();
@@ -26,9 +28,22 @@ export default () => {
 	);
 
 	// this is used from the service worker to cache all our assets on load
-	app.use(
+	app.get(
 		'/calypso/assets.json',
-		express.static( path.resolve( __dirname, '..', 'bundler', 'asset-files.json' ) )
+		( () => {
+			// cache last response
+			let lastAssetsResponse;
+			return function( req, res ) {
+				const assetsHash = getAssets().hash;
+				if ( ! lastAssetsResponse || lastAssetsResponse.hash !== assetsHash ) {
+					lastAssetsResponse = {
+						assets: flatten( Object.values( generateStaticUrls() ) ),
+						hash: assetsHash,
+					};
+				}
+				res.json( lastAssetsResponse );
+			};
+		} )()
 	);
 
 	return app;
