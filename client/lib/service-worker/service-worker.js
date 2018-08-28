@@ -16,7 +16,7 @@
 const queuedMessages = [];
 const CACHE_VERSION = 'v1';
 const OFFLINE_CALYPSO_PAGE = '/offline';
-const ASSETS_POLLING_DELAY = 15 * 1000; // 15s
+const ASSETS_POLLING_INTERVAL = 1 * 60 * 1000; // 1 min
 
 /**
  *  We want to make sure that if the service worker gets updated that we
@@ -170,16 +170,16 @@ function checkUpTodate() {
 				}
 			} )
 			.then( function() {
-				setTimeout( checkUpTodate, ASSETS_POLLING_DELAY );
+				setTimeout( checkUpTodate, ASSETS_POLLING_INTERVAL );
 			} )
 			.catch( function() {
 				// Add some randomness to avoid DDoSing the server on error
-				setTimeout( checkUpTodate, ASSETS_POLLING_DELAY + 10 * Math.random() - 5 );
+				setTimeout( checkUpTodate, ASSETS_POLLING_INTERVAL + 10 * Math.random() - 5 );
 			} );
 	} );
 }
 
-setTimeout( checkUpTodate, ASSETS_POLLING_DELAY );
+setTimeout( checkUpTodate, ASSETS_POLLING_INTERVAL );
 
 /* eslint-disable */
 function isCacheable( url ) {
