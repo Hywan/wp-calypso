@@ -11,19 +11,18 @@
 
 /* eslint-disable */
 'use strict';
-var currentAssetsHash;
 /* eslint-enable */
 
 const queuedMessages = [];
 const CACHE_VERSION = 'v1';
 const OFFLINE_CALYPSO_PAGE = '/offline';
+const ASSETS_POLLING_DELAY = 15 * 1000; // 15s
 
 /**
  *  We want to make sure that if the service worker gets updated that we
  *  immediately claim it, to ensure we're not running stale versions of the worker
  *	See: https://developer.mozilla.org/en-US/docs/Web/API/ServiceWorkerGlobalScope/skipWaiting
  **/
-
 self.addEventListener( 'install', function( event ) {
 	// The promise that skipWaiting() returns can be safely ignored.
 	self.skipWaiting();
@@ -44,6 +43,31 @@ self.addEventListener( 'activate', function( event ) {
 		] )
 	);
 } );
+
+function sendMessages( messages, focus ) {
+	focus = focus || false;
+	return self.clients.matchAll().then( function( clientList ) {
+		if ( clientList.length > 0 ) {
+			messages.forEach( function( message ) {
+				clientList[ 0 ].postMessage( message );
+			} );
+			if ( focus ) {
+				try {
+					clientList[ 0 ].focus();
+				} catch ( err ) {
+					// Client didn't need focus
+				}
+			}
+		} else {
+			messages.forEach( function( message ) {
+				queuedMessages.push( message );
+			} );
+			if ( focus ) {
+				self.clients.openWindow( '/' );
+			}
+		}
+	} );
+}
 
 self.addEventListener( 'push', function( event ) {
 	let notification;
@@ -77,21 +101,10 @@ self.addEventListener( 'notificationclick', function( event ) {
 	notification.close();
 
 	event.waitUntil(
-		self.clients.matchAll().then( function( clientList ) {
-			if ( clientList.length > 0 ) {
-				clientList[ 0 ].postMessage( { action: 'openPanel' } );
-				clientList[ 0 ].postMessage( { action: 'trackClick', notification: notification.data } );
-				try {
-					clientList[ 0 ].focus();
-				} catch ( err ) {
-					// Client didn't need focus
-				}
-			} else {
-				queuedMessages.push( { action: 'openPanel' } );
-				queuedMessages.push( { action: 'trackClick', notification: notification.data } );
-				self.clients.openWindow( '/' );
-			}
-		} )
+		sendMessages(
+			[ { action: 'openPanel' }, { action: 'trackClick', notification: notification.data } ],
+			true
+		)
 	);
 } );
 
@@ -124,48 +137,49 @@ self.addEventListener( 'fetch', function( event ) {
 		return;
 	}
 
-	// HTML Pages, fetch from the server and fallback to the Offline page
 	if ( request.mode === 'navigate' ) {
-		const previousHash = currentAssetsHash;
-		if ( navigator.onLine ) {
-			event.respondWith(
-				fetchNetworkFirst( request, OFFLINE_CALYPSO_PAGE ).then( function( response ) {
-					// Detect if the loaded page is calypso or not
-					// TODO: update nginx to reverse proxy this header
-					if ( response.headers.get( 'x-powered-by' ) === 'Express' ) {
-						// Let's check that assets have not changed before serving the page
-						// Fetching assets.json on each page load should be relatively lightweight as
-						// the server will return a 304 response if it hasn't changed
-						return fetchAssets()
-							.then( function( assets ) {
-								if ( previousHash !== currentAssetsHash ) {
-									return Promise.all( [
-										cacheUrls( assets ),
-										// if assets have changed the offline page might have as well, refresh it
-										cacheUrls( [ OFFLINE_CALYPSO_PAGE ], true ),
-									] );
-								}
-							} )
-							.then( function() {
-								return response;
-							} )
-							.catch( function() {
-								return response;
-							} );
-					}
-					return response;
-				} )
-			);
-		} else {
-			event.respondWith( caches.match( OFFLINE_CALYPSO_PAGE ) );
-		}
-		return;
+		event.respondWith( fetchNetworkFirst( request, OFFLINE_CALYPSO_PAGE ) );
 	}
 
 	if ( isCacheable( request.url ) ) {
 		event.respondWith( fetchCacheFirst( request ) );
 	}
 } );
+
+// periodically check that assets are up to date
+function checkUpTodate() {
+	if ( ! navigator.onLine ) {
+		return;
+	}
+
+	if ( ! self.registration.active ) {
+		return;
+	}
+
+	return getAssetsHashFromCache().then( previousHash => {
+		return getAssets()
+			.then( function( response ) {
+				if ( previousHash !== response.hash ) {
+					return Promise.all( [
+						cacheUrls( response.assets ),
+						// if assets have changed the offline page might have as well, refresh it
+						cacheUrls( [ OFFLINE_CALYPSO_PAGE ], true ),
+					] ).then( function() {
+						return sendMessages( [ { action: 'needsRefresh' } ] );
+					} );
+				}
+			} )
+			.then( function() {
+				setTimeout( checkUpTodate, ASSETS_POLLING_DELAY );
+			} )
+			.catch( function() {
+				// Add some randomness to avoid DDoSing the server on error
+				setTimeout( checkUpTodate, ASSETS_POLLING_DELAY + 10 * Math.random() - 5 );
+			} );
+	} );
+}
+
+setTimeout( checkUpTodate, ASSETS_POLLING_DELAY );
 
 /* eslint-disable */
 function isCacheable( url ) {
@@ -189,14 +203,13 @@ function isCacheable( url ) {
 	return (
 		urlObject.origin === location.origin &&
 		urlObject.pathname.match( /\.(json|js|css|svg|gif|png|woff2?|ttf|eot|wav)$/ ) &&
-		! urlObject.pathname.match(
-			/assets\.json$|__webpack_hmr$|^\/socket\.io\/|^\/version$|\/flags\/[a-z]+\.svg$/
-		)
+		! urlObject.pathname.match( /__webpack_hmr$|^\/socket\.io\/|^\/version$|\/flags\/[a-z]+\.svg$/ )
 	);
 }
 /* eslint-enable */
 
 function fetchCacheFirst( request ) {
+	const url = request.url || request;
 	return caches.open( CACHE_VERSION ).then( function( cache ) {
 		return caches.match( request ).then( function( cachedResponse ) {
 			if ( cachedResponse ) {
@@ -205,7 +218,7 @@ function fetchCacheFirst( request ) {
 
 			return fetch( request )
 				.then( function( networkResponse ) {
-					if ( isCacheable( request.url ) ) {
+					if ( isCacheable( url ) ) {
 						cache.put( request, networkResponse.clone() );
 					}
 					return networkResponse;
@@ -219,10 +232,11 @@ function fetchCacheFirst( request ) {
 }
 
 function fetchNetworkFirst( request, fallback /* = null */ ) {
+	const url = request.url || request;
 	return caches.open( CACHE_VERSION ).then( function( cache ) {
 		return fetch( request )
 			.then( function( networkResponse ) {
-				if ( isCacheable( request.url ) ) {
+				if ( isCacheable( url ) ) {
 					cache.put( request, networkResponse.clone() );
 				}
 				return networkResponse;
@@ -241,11 +255,22 @@ function fetchNetworkFirst( request, fallback /* = null */ ) {
 	} );
 }
 
-function fetchAssets() {
-	return fetch( '/calypso/assets.json' ).then( function( response ) {
-		return response.json().then( function( json ) {
-			currentAssetsHash = json.hash;
-			return json.assets;
+function getAssets() {
+	return fetchNetworkFirst( '/calypso/assets.json' ).then( function( response ) {
+		return response.json();
+	} );
+}
+
+function getAssetsHashFromCache() {
+	return caches.open( CACHE_VERSION ).then( function( cache ) {
+		return cache.match( '/calypso/assets.json' ).then( function( cachedResponse ) {
+			if ( ! cachedResponse ) {
+				return null;
+			}
+
+			return cachedResponse.json().then( function( json ) {
+				return json.hash;
+			} );
 		} );
 	} );
 }

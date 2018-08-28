@@ -146,6 +146,10 @@ export class Notifications extends Component {
 					push_notification_type: event.data.notification.type,
 				} );
 
+			// TODO: move to its own component
+			case 'needsRefresh':
+				// eslint-disable-next-line no-console
+				console.warn( '[HMR] Cannot find update (Full reload needed)' );
 				return;
 		}
 	};
