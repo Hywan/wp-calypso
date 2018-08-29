@@ -8,7 +8,6 @@ import React, { Component } from 'react';
 import PropTypes from 'prop-types';
 import classNames from 'classnames';
 import { connect } from 'react-redux';
-import { UserAgent } from 'express-useragent';
 
 /**
  * Internal dependencies
@@ -31,6 +30,7 @@ import WeChatPaymentQRcode from './wechat-payment-qrcode';
 import { getHttpData, requestHttpData } from 'state/data-layer/http-data';
 import { http } from 'state/data-layer/wpcom-http/actions';
 import { recordGoogleEvent, recordTracksEvent } from 'state/analytics/actions';
+import userAgent from 'lib/user-agent';
 
 export class WechatPaymentBox extends Component {
 	static propTypes = {
@@ -67,7 +67,6 @@ export class WechatPaymentBox extends Component {
 		const {
 			resetWeChatOrder,
 			cart,
-			isMobile,
 			weChatOrderData: { redirectUrl },
 			isWeChatOrderDataError,
 			errorNotice,
@@ -80,7 +79,7 @@ export class WechatPaymentBox extends Component {
 
 		// The Wechat payment type should only redirect when on mobile as redirect urls
 		// are Wechat Pay mobile application urls: e.g. weixin://wxpay/bizpayurl?pr=RaXzhu4
-		if ( isMobile && redirectUrl ) {
+		if ( userAgent.isMobile && redirectUrl ) {
 			infoNotice(
 				translate( 'We are now redirecting you to the WeChat Pay mobile app to finalize payment.' )
 			);
@@ -95,7 +94,7 @@ export class WechatPaymentBox extends Component {
 			resetWeChatOrder();
 		}
 
-		if ( redirectUrl && ! isMobile ) {
+		if ( redirectUrl && ! userAgent.isMobile ) {
 			// Display on desktop
 			infoNotice(
 				translate( 'Please scan the WeChat Payment barcode.', {
@@ -114,7 +113,6 @@ export class WechatPaymentBox extends Component {
 
 			paymentType,
 			children,
-			isMobile,
 			isRequestingWeChatOrderData,
 		} = this.props;
 
@@ -123,7 +121,7 @@ export class WechatPaymentBox extends Component {
 			presaleChatAvailable && some( cart.products, isWpComBusinessPlan );
 
 		// Wechat qr codes get set on desktop instead of redirecting
-		if ( redirectUrl && ! isMobile ) {
+		if ( redirectUrl && ! userAgent.isMobile ) {
 			return (
 				<WeChatPaymentQRcode
 					orderId={ orderId }
@@ -220,9 +218,6 @@ export default connect(
 			isRequestingWeChatOrderData: 'pending' === wechatOrder.state,
 			isWeChatOrderDataError: 'failure' === wechatOrder.state,
 			configAge: Date.now() - wechatOrder.lastUpdated,
-			isMobile: get( window, 'navigator.userAgent', false )
-				? new UserAgent().parse( navigator.userAgent ).isMobile
-				: false,
 		};
 	},
 	( dispatch, { cart, transaction, selectedSite, redirectTo } ) => ( {
