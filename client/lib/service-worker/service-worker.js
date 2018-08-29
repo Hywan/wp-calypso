@@ -15,7 +15,7 @@
 
 const queuedMessages = [];
 const CACHE_VERSION = 'v1';
-const OFFLINE_CALYPSO_PAGE = '/offline';
+const OFFLINE_CALYPSO_URLS = [ '/offline', '/calypso/images/illustrations/error.svg' ];
 const ASSETS_POLLING_INTERVAL = 1 * 60 * 1000; // 1 minute
 const INVALID_CACHE_MAX_DURATION = 60 * 60 * 1000; // 1 hour
 
@@ -28,7 +28,7 @@ self.addEventListener( 'install', function( event ) {
 	// The promise that skipWaiting() returns can be safely ignored.
 	self.skipWaiting();
 
-	event.waitUntil( cacheUrls( [ OFFLINE_CALYPSO_PAGE ], true ) );
+	event.waitUntil( cacheUrls( OFFLINE_CALYPSO_URLS, true ) );
 } );
 
 self.addEventListener( 'activate', function( event ) {
@@ -139,7 +139,7 @@ self.addEventListener( 'fetch', function( event ) {
 	}
 
 	if ( request.mode === 'navigate' ) {
-		event.respondWith( fetchNetworkFirst( request, OFFLINE_CALYPSO_PAGE ) );
+		event.respondWith( fetchNetworkFirst( request, '/offline' ) );
 	}
 
 	if ( isCacheable( request.url ) ) {
@@ -181,7 +181,7 @@ function checkUpTodate() {
 								// TODO: Items never expire, will need cleanup at some point
 								cacheUrls( response.assets ),
 								// if assets have changed the offline page might have as well, refresh it
-								cacheUrls( [ OFFLINE_CALYPSO_PAGE ], true ),
+								cacheUrls( OFFLINE_CALYPSO_URLS, true ),
 							] ).then( function() {
 								return sendMessages( [ { action: 'needsRefresh' } ] );
 							} );
@@ -194,7 +194,7 @@ function checkUpTodate() {
 	} );
 }
 
-setTimeout( checkUpTodate, ASSETS_POLLING_INTERVAL );
+setTimeout( checkUpTodate, 5000 );
 
 /* eslint-disable */
 function isCacheable( url ) {

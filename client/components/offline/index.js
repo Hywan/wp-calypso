@@ -5,10 +5,12 @@
  */
 import React, { Component } from 'react';
 import { connect } from 'react-redux';
+import { localize } from 'i18n-calypso';
 
 /**
  * Internal dependencies
  */
+import EmptyContent from 'components/empty-content';
 import { isOffline } from 'state/application/selectors';
 
 class Offline extends Component {
@@ -27,21 +29,19 @@ class Offline extends Component {
 	}
 
 	render() {
+		const { translate } = this.props;
 		return (
-			<div>
-				<h2>No Internet</h2>
-				<div>
-					Try:
-					<ul>
-						<li>Checking the network cables, modem and router</li>
-						<li>Reconnecting to Wi-Fi</li>
-					</ul>
-				</div>
-			</div>
+			<EmptyContent
+				illustration="/calypso/images/illustrations/error.svg"
+				title={ translate( 'No Internet' ) }
+				line={ translate(
+					'Try checking the network cables, modem and router or reconnecting to Wi-Fi'
+				) }
+			/>
 		);
 	}
 }
 
 export default connect( state => ( {
 	isOffline: isOffline( state ),
-} ) )( Offline );
+} ) )( localize( Offline ) );
