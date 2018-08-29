@@ -13,7 +13,7 @@ import QRCode from 'qrcode.react';
  * Internal dependencies
  */
 import { localize, translate } from 'i18n-calypso';
-import { errorNotice } from 'state/notices/actions';
+import { errorNotice as errorNoticeAction } from 'state/notices/actions';
 import getOrderTransaction from 'state/selectors/get-order-transaction';
 import getOrderTransactionError from 'state/selectors/get-order-transaction-error';
 import { ORDER_TRANSACTION_STATUS } from 'state/order-transactions/constants';
@@ -28,87 +28,89 @@ export class WechatPaymentQRCode extends Component {
 		slug: PropTypes.string,
 
 		// Redux
-		showErrorNotice: PropTypes.func,
-		transactionReceiptId: PropTypes.number,
-		transactionStatus: PropTypes.string,
+		error: PropTypes.func,
 		transactionError: PropTypes.object,
+		transactionStatus: PropTypes.string,
+		transactionReceiptId: PropTypes.number,
 	};
 
-	shouldComponentUpdate(nextProps) {
+	componentDidUpdate( prevProps ) {
 		const {
 			slug,
-			showErrorNotice,
 			transactionError,
 			transactionStatus,
-			transactionReceiptId
-		} = nextProps;
+			transactionReceiptId,
+			errorNotice,
+		} = this.props;
 
 		// HTTP errors + Transaction errors
-		if ( transactionError ||
+		if (
+			transactionError ||
 			transactionStatus === ORDER_TRANSACTION_STATUS.ERROR ||
-			transactionStatus === ORDER_TRANSACTION_STATUS.FAILURE
-		 ) {
-			page( slug ? `/checkout/${ slug }` : '/plans');
+			transactionStatus === ORDER_TRANSACTION_STATUS.FAILURE ||
+			transactionStatus === ORDER_TRANSACTION_STATUS.UNKNOWN
+		) {
+			errorNotice(
+				translate( "Sorry, we couldn't process your payment. Please try again later." ),
+				{
+					displayOnNextPage: true,
+				}
+			);
 
-			// tofix: not reachable, page(path) doesn't exec until after notice is shown wiping the notice from view almost instantly
-			// https://www.npmjs.com/package/page doesn't seem to have any callback maybe settimeout?
-			showErrorNotice( translate( "Sorry, we couldn't process your payment. Please try again later." ) );
-
-			return false;
-		}
-
-		if (transactionStatus === ORDER_TRANSACTION_STATUS.UNKNOWN ) {
-			// Redirect users back to the plan page so that they won't be stuck here.
-			page( slug ? `/plans/my-plan/${ slug }` : '/plans' );
-
-			showErrorNotice( translate( 'Oops! Something went wrong. Please try again later.' ) );
-
-			return false;
-		}
-
-		if ( transactionStatus === ORDER_TRANSACTION_STATUS.SUCCESS ) {
+			page( slug ? `/checkout/${ slug }` : '/plans' );
+		} else if ( transactionStatus === ORDER_TRANSACTION_STATUS.SUCCESS ) {
 			if ( transactionReceiptId ) {
-				page( slug ? `/checkout/thank-you/${ slug }/${ transactionReceiptId }` : '/checkout/thank-you/no-site' /* no-site + receiptId errors */ );
+				page(
+					slug
+						? `/checkout/thank-you/${ slug }/${ transactionReceiptId }`
+						: '/checkout/thank-you/no-site' // no-site + receiptId errors
+				);
 			} else {
 				page( slug ? `/checkout/thank-you/${ slug }` : '/checkout/thank-you/no-site' );
 			}
-
-			return false;
 		}
-
-		return true;
 	}
 
 	render() {
-		return <React.Fragment>
-			<QueryOrderTransaction orderId={ this.props.orderId } pollIntervalMs={ 2000 } />
+		return (
+			<React.Fragment>
+				<QueryOrderTransaction orderId={ this.props.orderId } pollIntervalMs={ 2000 } />
 
-			<p className="checkout__wechat-qrcode-instruction">
-				{ translate( 'Please scan the barcode using the WeChat Pay application to confirm your %(price)s payment.', {
-					args: { price: this.props.cart.total_cost_display },
-					comment: 'Instruction to scan a QR barcode and finalize payment with WeChat Pay.',
-				} )	}
-			</p>
+				<p className="checkout__wechat-qrcode-instruction">
+					{ translate(
+						'Please scan the barcode using the WeChat Pay application to confirm your %(price)s payment.',
+						{
+							args: { price: this.props.cart.total_cost_display },
+							comment: 'Instruction to scan a QR barcode and finalize payment with WeChat Pay.',
+						}
+					) }
+				</p>
 
-			<div className="checkout__wechat-qrcode">
-				<QRCode value={ this.props.redirectUrl } />
-			</div>
+				<div className="checkout__wechat-qrcode">
+					<QRCode value={ this.props.redirectUrl } />
+				</div>
 
-			<Spinner className="checkout__wechat-qrcode-spinner" size={ 30 }/>
+				<Spinner className="checkout__wechat-qrcode-spinner" size={ 30 } />
 
-			<p className="checkout__wechat-qrcode-redirect supporting-text">
-				{ translate( 'On mobile? To open and pay with the WeChat Pay app directly, {{a}}click here{{/a}}.', {
-					components: { a: <a href={ this.props.redirectUrl } /> },
-					comment: 'Asking if mobile detection has failed and they would like to open and be redirected directly into the WeChat app in order to pay.'
-				} ) }
-			</p>
-		</React.Fragment>
+				<p className="checkout__wechat-qrcode-redirect supporting-text">
+					{ translate(
+						'On mobile? To open and pay with the WeChat Pay app directly, {{a}}click here{{/a}}.',
+						{
+							components: { a: <a href={ this.props.redirectUrl } /> },
+							comment:
+								'Asking if mobile detection has failed and they would like to open and be redirected directly into the WeChat app in order to pay.',
+						}
+					) }
+				</p>
+			</React.Fragment>
+		);
 	}
 }
 
 export default connect(
-	( storeState, ownProps ) =>  {
-		const { receiptId, processingStatus } = getOrderTransaction( storeState, ownProps.orderId ) || {};
+	( storeState, ownProps ) => {
+		const { receiptId, processingStatus } =
+			getOrderTransaction( storeState, ownProps.orderId ) || {};
 		const transactionError = getOrderTransactionError( storeState, ownProps.orderId );
 
 		return {
@@ -118,6 +120,6 @@ export default connect(
 		};
 	},
 	{
-		showErrorNotice: errorNotice,
+		errorNotice: errorNoticeAction,
 	}
-)( localize ( WechatPaymentQRCode ) );
+)( localize( WechatPaymentQRCode ) );

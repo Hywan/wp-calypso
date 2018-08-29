@@ -14,7 +14,10 @@ import { UserAgent } from 'express-useragent';
  * Internal dependencies
  */
 import { localize, translate } from 'i18n-calypso';
-import notices from 'notices';
+import {
+	infoNotice as infoNoticeAction,
+	errorNotice as errorNoticeAction,
+} from 'state/notices/actions';
 import { isWpComBusinessPlan } from 'lib/plans';
 import cartValues, { paymentMethodClassName, getLocationOrigin } from 'lib/cart-values';
 import { validatePaymentDetails } from 'lib/checkout';
@@ -37,6 +40,8 @@ export class WechatPaymentBox extends Component {
 		selectedSite: PropTypes.object,
 		fetchWeChatOrder: PropTypes.func,
 		resetWeChatOrder: PropTypes.func,
+		errorNotice: PropTypes.func,
+		infoNotice: PropTypes.func,
 	};
 
 	state = {
@@ -54,6 +59,7 @@ export class WechatPaymentBox extends Component {
 		if ( ! isEmpty( validation.errors ) ) {
 			return this.setState( { errorMessage: validation.errors[ 0 ] } );
 		}
+
 		this.props.fetchWeChatOrder( this.state.name );
 	};
 
@@ -63,17 +69,25 @@ export class WechatPaymentBox extends Component {
 			cart,
 			isMobile,
 			weChatOrderData: { redirectUrl },
+			isWeChatOrderDataError,
+			errorNotice,
+			infoNotice,
 		} = this.props;
+
+		if ( isWeChatOrderDataError ) {
+			errorNotice( translate( "We've encountered a problem. Please try again later." ) );
+		}
 
 		// The Wechat payment type should only redirect when on mobile as redirect urls
 		// are Wechat Pay mobile application urls: e.g. weixin://wxpay/bizpayurl?pr=RaXzhu4
 		if ( isMobile && redirectUrl ) {
-			notices.info(
+			infoNotice(
 				translate( 'We are now redirecting you to the WeChat Pay mobile app to finalize payment.' )
 			);
 			return location.assign( redirectUrl );
 		}
 
+		// Reset transaction if cart is modified
 		if (
 			prevProps.cart.total_cost !== cart.total_cost ||
 			prevProps.cart.products.length !== cart.products.length
@@ -83,7 +97,7 @@ export class WechatPaymentBox extends Component {
 
 		if ( redirectUrl && ! isMobile ) {
 			// Display on desktop
-			notices.info(
+			infoNotice(
 				translate( 'Please scan the WeChat Payment barcode.', {
 					comment: 'Instruction to scan the on screen barcode.',
 				} )
@@ -97,20 +111,16 @@ export class WechatPaymentBox extends Component {
 			selectedSite,
 			presaleChatAvailable,
 			cart,
+
 			paymentType,
 			children,
 			isMobile,
-			isWeChatOrderDataError,
 			isRequestingWeChatOrderData,
 		} = this.props;
 
 		// Only show if chat is available and we have a business plan in the cart.
 		const showPaymentChatButton =
 			presaleChatAvailable && some( cart.products, isWpComBusinessPlan );
-
-		if ( isWeChatOrderDataError ) {
-			notices.error( translate( "We've encountered a problem. Please try again later." ) );
-		}
 
 		// Wechat qr codes get set on desktop instead of redirecting
 		if ( redirectUrl && ! isMobile ) {
@@ -180,10 +190,12 @@ export class WechatPaymentBox extends Component {
 	}
 }
 
+export const requestId = cart =>
+	`my-sites/checkout/checkout/wechat-payment-box/${ get( cart, 'cart_key', '0' ) }`;
+
 export const getWeChatTransactionOrderDetails = ( { cart, domainDetails, payment } ) => {
-	const id = `transaction-payment-method-wechat-${ cart.client_metadata }`;
 	return requestHttpData(
-		id,
+		requestId( cart ),
 		http( {
 			path: '/me/transactions',
 			apiVersion: '1.1',
@@ -192,7 +204,7 @@ export const getWeChatTransactionOrderDetails = ( { cart, domainDetails, payment
 		} ),
 		{
 			fromApi: () => ( { order_id, redirect_url } ) => [
-				[ id, { orderId: order_id, redirectUrl: redirect_url } ],
+				[ requestId( cart ), { orderId: order_id, redirectUrl: redirect_url } ],
 			],
 			freshness: -Infinity,
 		}
@@ -201,8 +213,8 @@ export const getWeChatTransactionOrderDetails = ( { cart, domainDetails, payment
 
 export default connect(
 	( state, { cart } ) => {
-		const wechatOrder =
-			getHttpData( `transaction-payment-method-wechat-${ cart.client_metadata }` ) || {};
+		const wechatOrder = getHttpData( requestId( cart ) ) || {};
+
 		return {
 			weChatOrderData: get( wechatOrder, 'data', {} ),
 			isRequestingWeChatOrderData: 'pending' === wechatOrder.state,
@@ -216,16 +228,21 @@ export default connect(
 	( dispatch, { cart, transaction, selectedSite, redirectTo } ) => ( {
 		fetchWeChatOrder: name => {
 			const origin = getLocationOrigin( location );
+
 			const slug = get( selectedSite, 'slug', 'no-site' );
+
 			const payment = {
 				name,
 				payment_method: paymentMethodClassName( 'wechat' ),
 				success_url: origin + redirectTo(),
 				cancel_url: `${ origin }/checkout/${ slug }`,
 			};
-			notices.info( translate( 'Setting up your WeChat Pay payment' ) );
+
+			dispatch( infoNoticeAction( translate( 'Setting up your WeChat Pay payment' ) ) );
+
 			dispatch( recordTracksEvent( 'calypso_checkout_with_redirect_wechat' ) );
 			dispatch( recordGoogleEvent( 'Upgrades', 'Clicked Checkout With Wechat Payment Button' ) );
+
 			getWeChatTransactionOrderDetails( {
 				cart,
 				domainDetails: transaction.domainDetails,
@@ -235,10 +252,12 @@ export default connect(
 		// We should probably extend `update()` in client/state/data-layer/http-data.js
 		// to set state back to 'uninitialized'
 		resetWeChatOrder: () =>
-			window.httpData.set( `transaction-payment-method-wechat-${ cart.client_metadata }`, {
+			window.httpData.set( requestId( cart ), {
 				state: 'uninitialized',
 				data: {},
 				error: undefined,
 			} ),
+		errorNotice: errorNoticeAction,
+		infoNotice: infoNoticeAction,
 	} )
 )( localize( WechatPaymentBox ) );
