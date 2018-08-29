@@ -165,24 +165,32 @@ function checkUpTodate() {
 		return checkLater();
 	}
 
-	return getAssetsHashFromCache().then( previousHash => {
-		return getAssets()
-			.then( function( response ) {
-				if ( previousHash !== response.hash ) {
-					return clearCache().then( function() {
-						return Promise.all( [
-							// TODO: Items never expire, will need cleanup at some point
-							cacheUrls( response.assets ),
-							// if assets have changed the offline page might have as well, refresh it
-							cacheUrls( [ OFFLINE_CALYPSO_PAGE ], true ),
-						] ).then( function() {
-							return sendMessages( [ { action: 'needsRefresh' } ] );
+	return self.clients.matchAll().then( function( clientList ) {
+		const hasAtLeastOneClient = clientList.length > 0;
+		if ( ! hasAtLeastOneClient ) {
+			// no active tab is running
+			return checkLater();
+		}
+
+		return getAssetsHashFromCache().then( previousHash => {
+			return getAssets()
+				.then( function( response ) {
+					if ( previousHash !== response.hash ) {
+						return clearCache().then( function() {
+							return Promise.all( [
+								// TODO: Items never expire, will need cleanup at some point
+								cacheUrls( response.assets ),
+								// if assets have changed the offline page might have as well, refresh it
+								cacheUrls( [ OFFLINE_CALYPSO_PAGE ], true ),
+							] ).then( function() {
+								return sendMessages( [ { action: 'needsRefresh' } ] );
+							} );
 						} );
-					} );
-				}
-			} )
-			.then( checkLater )
-			.catch( checkLater );
+					}
+				} )
+				.then( checkLater )
+				.catch( checkLater );
+		} );
 	} );
 }
 
